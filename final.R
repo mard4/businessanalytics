@@ -1,6 +1,6 @@
 getwd()
 setwd("C:/Users/Mardeen/Desktop/businessanalytics")
-setwd("/home/sav/Desktop/labcust/businessanalytics")
+#setwd("/home/sav/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
@@ -65,7 +65,10 @@ table(data$alt[data$choice == 0])
 chisq.test(table(data$alt[data$choice == 1]))
 
 df <- data
-##### transformations
+
+#### ============================================== 
+# Transformations
+#### ============================================== 
 df$Price <- factor(df$Price, levels = c("Budget","LowerMid-range",
                                             "Mid-range","UpperMid-range","Premium"))
 df$Brand <- factor(df$Brand)
@@ -88,7 +91,9 @@ df %>%
   ylab("Count") +
   theme_minimal()
 
-################ MODELLI ##############################
+#### ============================================== 
+# Models
+#### ============================================== 
 # Create the design matrix
 data_mlogit <- dfidx(df, idx = list(c("ques", "resp.id"), "alt"))
 data_mlogit
@@ -123,6 +128,7 @@ lrtest(model2_price_fac, model1_price_fac)
 # Fit the model without intercept parameters and with price as a quantitative variable
 model3 <- mlogit(choice ~ Price_num + Brand + RAMGB +
                    Foldable + CameraQuality | -1, data = data_mlogit)
+
 model3_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
                    Foldable + CameraQuality | -1, data = data_mlogit)
 summary(model3)
@@ -130,6 +136,9 @@ summary(model3_price_fac)
 lrtest(model3, model2)
 lrtest(model3_price_fac, model2_price_fac)
 
+#### ============================================== 
+# WTP
+#### ============================================== 
 
 # Compute the willingness to pay
 coefs <- summary(model1)$coefficients
@@ -163,5 +172,102 @@ ggplot(wtp_df, aes(x = reorder(Attribute, WTP), y = WTP)) +
     y = "Willingness to Pay (Price Units)"
   )
 
+#### ============================================== 
+# Predictions
+#### ============================================== 
 
-# mixed ml model todo
+# Prediction function for MNL
+predict.mnl <- function(model, data) {
+  data.model <- model.matrix(update(model$formula, 0 ~ .), data = data)[,-1]
+  logitUtility <- data.model %*% model$coef
+  share <- exp(logitUtility) / sum(exp(logitUtility))
+  cbind(share, data)
+}
+
+# Define attributes based on your data
+attributes <- list(
+  Price = levels(df$Price),
+  Brand = levels(df$Brand),
+  RAMGB = levels(df$RAMGB),
+  Foldable = levels(df$Foldable),
+  CameraQuality = levels(df$CameraQuality)
+)
+
+# Create all possible designs
+allDesign <- expand.grid(attributes)
+# Add Price_num column to allDesign
+allDesign$Price_num <- price_mapping[allDesign$Price]
+# Select a subset of designs for prediction
+new.data <- allDesign[c(1, 5, 10, 15), ]  # Adjust indices as needed
+# Predict probabilities
+predictions <- predict.mnl(model2, new.data)
+# Convert predictions to a data frame for visualization
+predictions_df <- as.data.frame(predictions)
+print(predictions)
+
+
+#### ============================================== 
+# Modelling: Mixed MNL model
+#### ============================================== 
+
+########################################
+#### 3- Modelling: Mixed MNL model ####
+########################################
+
+# Define the random parameter structure
+# Set all parameters to have random effects with normal distribution
+coef_names <- names(model2_simple$coef)
+model2.rpar <- rep("n", length = length(coef_names))
+names(model2.rpar) <- coef_names
+
+# Fit the Mixed MNL model with uncorrelated random effects
+model2.mixed <- mlogit(
+  choice ~ Price + Brand + RAMGB + Foldable + CameraQuality | -1,
+  data = data_mlogit,
+  panel = TRUE,
+  rpar = model2.rpar,
+  correlation = FALSE
+)
+summary(model2.mixed)
+# Visualize the distribution of random effects to understand heterogeneity
+plot(model2.mixed)
+
+########################################
+#### Analyze Random Effects for Price ####
+########################################
+
+names(rpar(model2.mixed))
+# Random effect for PriceLowerMid-range
+PriceLowerMid.distr <- rpar(model2.mixed, "PriceLowerMid-range")
+summary(PriceLowerMid.distr)
+mean(PriceLowerMid.distr)
+plot(PriceLowerMid.distr)
+
+# Random effect for PricePremium
+PricePremium.distr <- rpar(model2.mixed, "PricePremium")
+summary(PricePremium.distr)
+mean(PricePremium.distr)
+plot(PricePremium.distr)
+
+
+########################################
+#### Add Correlated Random Coefficients ####
+########################################
+
+# Update the model to include correlations between random effects
+model2.mixed_corr <- update(model2.mixed, correlation = TRUE)
+summary(model2.mixed_corr)
+# Analyze the correlation matrix of random parameters
+summary(vcov(model2.mixed_corr, what = "rpar", type = "cor"))
+cor_matrix <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
+cor_df <- as.data.frame(as.table(cor_matrix))
+# Plot the heatmap using ggplot2
+ggplot(cor_df, aes(Var1, Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1), space = "Lab", name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Correlation Matrix of Random Parameters (Mixed MNL Model)",
+       x = "",
+       y = "")
+
