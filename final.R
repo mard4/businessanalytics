@@ -1,8 +1,6 @@
 getwd()
 setwd("C:/Users/Mardeen/Desktop/businessanalytics")
-
-install.packages('mlogit')
-install.packages("rbibutils")
+setwd("/home/sav/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
@@ -10,6 +8,15 @@ library(ggplot2)
 library(tidyr)
 
 data <- read.csv2("CBC_cellphone_data.csv")
+price_mapping <- c("Budget" = 200, 
+                   "LowerMid-range" = 400, 
+                   "Mid-range" = 600, 
+                   "UpperMid-range" = 800, 
+                   "Premium" = 1000)
+
+data$Price_num <- price_mapping[data$Price]
+
+
 head(data)
 str(data)
 # ok the data is in a wide format, each row represent a question, so we have more columns
@@ -27,6 +34,7 @@ data %>%
   summarise_all(~length(unique(.)))
 xtabs(choice ~ Brand, data=data)
 xtabs(choice ~ Price, data=data)
+xtabs(choice ~ Price_num, data=data)
 xtabs(choice ~ RAMGB, data=data)
 xtabs(choice ~ Foldable, data=data)
 xtabs(choice ~ CameraQuality, data=data)
@@ -54,7 +62,7 @@ table(data$alt[data$choice == 1]) # inclinazione verso il centro
 table(data$alt[data$choice == 0]) 
 
 # verifica se la distribuzione delle scelte ? significativamente diversa da una distribuzione uniforme 
-chisq.test(table(data$alt[data$choice == 1])) 
+chisq.test(table(data$alt[data$choice == 1]))
 
 df <- data
 ##### transformations
@@ -86,35 +94,74 @@ data_mlogit <- dfidx(df, idx = list(c("ques", "resp.id"), "alt"))
 data_mlogit
 
 ## Le frequenze sono abbastanza bilanciate tra le 4 alternative
+## Ho tenuto entrambi i modelli per vedere se ci sono variazioni trattando il prezzo come numerico vs factor
 
-model1 <- mlogit(choice ~ Price + Brand + RAMGB +
+model1 <- mlogit(choice ~ Price_num + Brand + RAMGB +
                    Foldable + CameraQuality,
                  data = data_mlogit)
+
+model1_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
+                   Foldable + CameraQuality,
+                 data = data_mlogit)
+
 summary(model1)
+summary(model1_price_fac)
 
 # Fit the model without intercept parameters
-model2 <- mlogit(choice ~ Price + Brand + RAMGB +
+model2 <- mlogit(choice ~ Price_num + Brand + RAMGB +
+                   Foldable + CameraQuality | -1, data = data_mlogit)
+model2_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
                    Foldable + CameraQuality | -1, data = data_mlogit)
 summary(model2)
+summary(model2_price_fac)
 
 # Test the restriction on the intercepts by comparing the two models
 # through a likelihood ratio test
 lrtest(model2, model1)
-
-# modello con price numerica
-data_mlogit$Price_num <- as.numeric(factor(data_mlogit$Price, 
-                                           levels = c("Budget", "LowerMid-range", "Mid-range", "UpperMid-range", "Premium")))
-
-table(data_mlogit$Price_num)
+lrtest(model2_price_fac, model1_price_fac)
 
 # Fit the model without intercept parameters and with price as a quantitative variable
 model3 <- mlogit(choice ~ Price_num + Brand + RAMGB +
                    Foldable + CameraQuality | -1, data = data_mlogit)
+model3_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
+                   Foldable + CameraQuality | -1, data = data_mlogit)
 summary(model3)
+summary(model3_price_fac)
 lrtest(model3, model2)
+lrtest(model3_price_fac, model2_price_fac)
+
 
 # Compute the willingness to pay
-coefs <- summary(model3)$coefficients
-price_coef <- coefs[0:1] #price num
-wtp <- coefs / abs(price_coef)
+coefs <- summary(model1)$coefficients
+price_coef <- coefs["Price_num"]
+wtp <- -coefs / price_coef
 wtp
+
+# Create a data frame for better visualization
+wtp_df <- data.frame(
+  Attribute = names(wtp),
+  WTP = wtp
+)
+
+
+# Remove Price_num from results since it's our reference
+wtp_df <- wtp_df[wtp_df$Attribute != "Price_num", ]
+
+# Sort by absolute WTP value
+wtp_df <- wtp_df[order(abs(wtp_df$WTP), decreasing = TRUE), ]
+
+# Print formatted results
+print(wtp_df)
+
+ggplot(wtp_df, aes(x = reorder(Attribute, WTP), y = WTP)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Willingness to Pay by Attribute",
+    x = "Attribute",
+    y = "Willingness to Pay (Price Units)"
+  )
+
+
+# mixed ml model todo
