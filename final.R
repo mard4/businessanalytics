@@ -271,3 +271,49 @@ ggplot(cor_df, aes(Var1, Var2, fill = Freq)) +
        x = "",
        y = "")
 
+
+#############
+# Function to get features with strong correlations
+get_strong_correlations <- function(corr_mat, threshold = 0.7) {
+  # Find indices of correlations above threshold or below -threshold
+  high_corr_indices <- which(abs(corr_mat) > threshold, arr.ind = TRUE)
+  
+  # Filter out self-correlations (where row index equals column index)
+  high_corr_indices <- high_corr_indices[high_corr_indices[, 1] != high_corr_indices[, 2], ]
+  
+  # Get the unique feature names from the row and column indices
+  features <- unique(c(rownames(corr_mat)[high_corr_indices[, 1]], 
+                       colnames(corr_mat)[high_corr_indices[, 2]]))
+  
+  return(features)
+}
+# Extract the correlation matrix of random parameters
+corr_mat <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
+# Get features with strong correlations
+strongly_correlated_features <- get_strong_correlations(corr_mat, threshold = 0.7)
+print(strongly_correlated_features)
+
+# Update the model to include partially correlated random effects
+# Specify correlation only for the strongly correlated features
+model2.mixed_strong <- update(model2.mixed, correlation = strongly_correlated_features)
+
+# Compare models using likelihood ratio tests
+# Fixed effects vs. uncorrelated random effects
+lrtest(model2, model2.mixed)
+# Uncorrelated random effects vs. all correlated random effects
+lrtest(model2.mixed, model2.mixed2)
+# Partially correlated random effects vs. all correlated random effects
+lrtest(model2.mixed, model2.mixed_strong) 
+
+
+########################################
+#### Simulating preference shares ####
+########################################
+
+#todo
+
+########################################
+#### Sensitivity Chart ####
+########################################
+
+
