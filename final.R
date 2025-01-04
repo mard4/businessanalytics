@@ -301,7 +301,7 @@ model2.mixed_strong <- update(model2.mixed, correlation = strongly_correlated_fe
 # Fixed effects vs. uncorrelated random effects
 lrtest(model2, model2.mixed)
 # Uncorrelated random effects vs. all correlated random effects
-lrtest(model2.mixed, model2.mixed2)
+lrtest(model2.mixed, model2.mixed_corr)
 # Partially correlated random effects vs. all correlated random effects
 lrtest(model2.mixed, model2.mixed_strong) 
 
