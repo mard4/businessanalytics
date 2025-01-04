@@ -49,13 +49,13 @@ length(unique(data$ques))
 
 
 # Numeric
-data %>%
-  select_if(is.numeric) %>%
-  gather() %>%
-  ggplot2::ggplot(aes(value)) +
-  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
-  facet_wrap(~key, scales = "free") +
-  theme_minimal()
+# data %>%
+#   select_if(is.numeric) %>%
+#   gather() %>%
+#   ggplot2::ggplot(aes(value)) +
+#   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+#   facet_wrap(~key, scales = "free") +
+#   theme_minimal()
 
 ###
 table(data$alt[data$choice == 1]) # inclinazione verso il centro
@@ -78,18 +78,26 @@ df$CameraQuality <- factor(df$CameraQuality,
                         levels = c("Low","Medium","High"))
 df$RAMGB <- factor(df$RAMGB, levels=c("Low","LowerMid-range","Mid-range","High-end"))
 
-####
+#### Frequencies
 
 df %>%
   select_if(is.factor) %>%
   gather() %>%
   ggplot(aes(value)) +
-  geom_bar(fill = "skyblue", color = "black") +
+  geom_bar(fill = "lightblue", color = "black") +
   facet_wrap(~key, scales = "free") +
   geom_text(stat = "count", aes(label = ..count..), vjust = 1.5, color = "white", size = 4) +
   xlab("") +
   ylab("Count") +
   theme_minimal()
+
+
+ggplot(data, aes(x = factor(alt), y = choice)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(x = "Alternative (alt)", y = "Choice Counts", title = "Distribution of Choices by Alternative") +
+  geom_text(aes(label = choice), vjust = 1.5, color = "white", size = 4) +
+  theme_minimal()
+
 
 #### ============================================== 
 # Models
@@ -101,16 +109,18 @@ data_mlogit
 ## Le frequenze sono abbastanza bilanciate tra le 4 alternative
 ## Ho tenuto entrambi i modelli per vedere se ci sono variazioni trattando il prezzo come numerico vs factor
 
+model1_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
+                             Foldable + CameraQuality,
+                           data = data_mlogit)
+
 model1 <- mlogit(choice ~ Price_num + Brand + RAMGB +
                    Foldable + CameraQuality,
                  data = data_mlogit)
 
-model1_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
-                   Foldable + CameraQuality,
-                 data = data_mlogit)
 
-summary(model1)
 summary(model1_price_fac)
+summary(model1)
+
 
 # Fit the model without intercept parameters
 model2 <- mlogit(choice ~ Price_num + Brand + RAMGB +
