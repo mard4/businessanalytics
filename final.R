@@ -216,13 +216,13 @@ print(predictions)
 
 # Define the random parameter structure
 # Set all parameters to have random effects with normal distribution
-coef_names <- names(model2_simple$coef)
+coef_names <- names(model2$coef)
 model2.rpar <- rep("n", length = length(coef_names))
 names(model2.rpar) <- coef_names
 
 # Fit the Mixed MNL model with uncorrelated random effects
 model2.mixed <- mlogit(
-  choice ~ Price + Brand + RAMGB + Foldable + CameraQuality | -1,
+  choice ~ Price_num + Brand + RAMGB + Foldable + CameraQuality | -1,
   data = data_mlogit,
   panel = TRUE,
   rpar = model2.rpar,
@@ -238,16 +238,16 @@ plot(model2.mixed)
 
 names(rpar(model2.mixed))
 # Random effect for PriceLowerMid-range
-PriceLowerMid.distr <- rpar(model2.mixed, "PriceLowerMid-range")
-summary(PriceLowerMid.distr)
-mean(PriceLowerMid.distr)
-plot(PriceLowerMid.distr)
-
-# Random effect for PricePremium
-PricePremium.distr <- rpar(model2.mixed, "PricePremium")
-summary(PricePremium.distr)
-mean(PricePremium.distr)
-plot(PricePremium.distr)
+# PriceLowerMid.distr <- rpar(model2.mixed, "PriceLowerMid-range")
+# summary(PriceLowerMid.distr)
+# mean(PriceLowerMid.distr)
+# plot(PriceLowerMid.distr)
+# 
+# # Random effect for PricePremium
+# PricePremium.distr <- rpar(model2.mixed, "PricePremium")
+# summary(PricePremium.distr)
+# mean(PricePremium.distr)
+# plot(PricePremium.distr)
 
 
 ########################################
