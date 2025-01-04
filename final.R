@@ -135,17 +135,6 @@ summary(model2_price_fac)
 lrtest(model2, model1)
 lrtest(model2_price_fac, model1_price_fac)
 
-# Fit the model without intercept parameters and with price as a quantitative variable
-model3 <- mlogit(choice ~ Price_num + Brand + RAMGB +
-                   Foldable + CameraQuality | -1, data = data_mlogit)
-
-model3_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
-                   Foldable + CameraQuality | -1, data = data_mlogit)
-summary(model3)
-summary(model3_price_fac)
-lrtest(model3, model2)
-lrtest(model3_price_fac, model2_price_fac)
-
 #### ============================================== 
 # WTP
 #### ============================================== 
