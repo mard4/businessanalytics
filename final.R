@@ -1,11 +1,13 @@
 getwd()
 setwd("C:/Users/Mardeen/Desktop/businessanalytics")
-#setwd("/home/sav/Desktop/labcust/businessanalytics")
+setwd("/home/sav/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
 library(ggplot2)
 library(tidyr)
+library(MASS)
+
 
 data <- read.csv2("CBC_cellphone_data.csv")
 price_mapping <- c("Budget" = 200, 
@@ -197,7 +199,8 @@ allDesign <- expand.grid(attributes)
 # Add Price_num column to allDesign
 allDesign$Price_num <- price_mapping[allDesign$Price]
 # Select a subset of designs for prediction
-new.data <- allDesign[c(1, 5, 10, 15), ]  # Adjust indices as needed
+# We have a softmax function that picks the "winner"
+new.data <- allDesign[c(1, 179, 278, 400), ]  # Adjust indices as needed
 # Predict probabilities
 predictions <- predict.mnl(model2, new.data)
 # Convert predictions to a data frame for visualization
@@ -228,8 +231,16 @@ model2.mixed <- mlogit(
   correlation = FALSE
 )
 summary(model2.mixed)
-# Visualize the distribution of random effects to understand heterogeneity
+# Vorrei visualizzare le distribuzioni per ogni coefficiente ma devo vedere come fare per bene
+par(mar = c(4, 4, 2, 2))
+par(mfrow = c(1,1))
 plot(model2.mixed)
+random_coefs <- model2.mixed$coefficients
+random_price_num <- model2.mixed$rpar$Price_num
+random_price_num_mean <- random_price_num$mean
+random_price_num_sigma <- random_price_num$sigma
+
+random_coefs_df <- as.data.frame(random_coefs)
 
 ########################################
 #### Analyze Random Effects for Price ####
@@ -272,7 +283,34 @@ ggplot(cor_df, aes(Var1, Var2, fill = Freq)) +
 
 
 #############
-# Function to get features with strong correlations
+# Function to get features with strong correlations for easier visualization
+get_strong_correlations_df <- function(corr_mat, threshold) {
+  # Find indices of correlations above threshold or below -threshold
+  high_corr_indices <- which(abs(corr_mat) > threshold, arr.ind = TRUE)
+  
+  # Filter out self-correlations (where row index equals column index)
+  high_corr_indices <- high_corr_indices[high_corr_indices[, 1] != high_corr_indices[, 2], ]
+  
+  # Create a dataframe to store variable pairs and their correlation values
+  correlations_df <- data.frame(
+    Feature1 = rownames(corr_mat)[high_corr_indices[, 1]],
+    Feature2 = colnames(corr_mat)[high_corr_indices[, 2]],
+    Correlation = corr_mat[high_corr_indices]
+  )
+  return(correlations_df)
+}
+# Extract the correlation matrix of random parameters
+corr_mat <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
+# Get features with strong correlations
+strongly_correlated_features_07 <- get_strong_correlations_df(corr_mat, threshold = 0.7)
+strongly_correlated_features_06 <- get_strong_correlations_df(corr_mat, threshold = 0.6)
+
+print(strongly_correlated_features_07)
+print(strongly_correlated_features_06)
+
+
+# Function to get features with strong correlations to create the model
+
 get_strong_correlations <- function(corr_mat, threshold = 0.7) {
   # Find indices of correlations above threshold or below -threshold
   high_corr_indices <- which(abs(corr_mat) > threshold, arr.ind = TRUE)
@@ -286,15 +324,16 @@ get_strong_correlations <- function(corr_mat, threshold = 0.7) {
   
   return(features)
 }
-# Extract the correlation matrix of random parameters
-corr_mat <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
 # Get features with strong correlations
-strongly_correlated_features <- get_strong_correlations(corr_mat, threshold = 0.7)
-print(strongly_correlated_features)
+strongly_correlated_features_07 <- get_strong_correlations(corr_mat, threshold = 0.7)
+strongly_correlated_features_06 <- get_strong_correlations(corr_mat, threshold = 0.6)
+
+print(strongly_correlated_features_07)
+print(strongly_correlated_features_06)
 
 # Update the model to include partially correlated random effects
 # Specify correlation only for the strongly correlated features
-model2.mixed_strong <- update(model2.mixed, correlation = strongly_correlated_features)
+model2.mixed_strong <- update(model2.mixed, correlation = strongly_correlated_features_07)
 
 # Compare models using likelihood ratio tests
 # Fixed effects vs. uncorrelated random effects
@@ -302,17 +341,106 @@ lrtest(model2, model2.mixed)
 # Uncorrelated random effects vs. all correlated random effects
 lrtest(model2.mixed, model2.mixed_corr)
 # Partially correlated random effects vs. all correlated random effects
-lrtest(model2.mixed, model2.mixed_strong) 
+lrtest(model2.mixed_strong, model2.mixed) 
 
+# model2.mixed_strong is the better model (notice how the chi squared improves at each test)
 
 ########################################
 #### Simulating preference shares ####
 ########################################
+predict.mixed.mnl <- function(model, data, nresp=1000) {
+  data.model <- model.matrix(update(model$formula, 0 ~ .), data = data)[,-1]
+  coef.Sigma <- cov.mlogit(model)
+  coef.mu <- model$coef[1:dim(coef.Sigma)[1]]
+  draws <- mvrnorm(n=nresp, coef.mu, coef.Sigma)
+  shares <- matrix(NA, nrow=nresp, ncol=nrow(data))
+  dim(data.model)
+  dim(draws)
+  for (i in 1:nresp) {
+    utility <- data.model%*%draws[i,]
+    share = exp(utility)/sum(exp(utility))
+    shares[i,] <- share
+  }
+  result <- cbind(colMeans(shares), data)
+  return(result)
+}
 
-#todo
+predictions_mixed_corr <- predict.mixed.mnl(model2.mixed_corr, data = new.data)
+
+predict.mixed.mnl.strong <- function(model, data, nresp=1000) {
+  data.model <- model.matrix(update(model$formula, 0 ~ .), data = data)[,-1]
+  
+  # Get random parameters names
+  rpar_names <- names(model$rpar)
+  # Get indices of random parameters in coefficient vector
+  idx <- which(names(model$coefficients) %in% rpar_names)
+  
+  # Extract correct covariance matrix and coefficients
+  coef.Sigma <- vcov(model)[idx, idx]
+  coef.mu <- model$coefficients[idx]
+  
+  draws <- mvrnorm(n=nresp, coef.mu, coef.Sigma)
+  shares <- matrix(NA, nrow=nresp, ncol=nrow(data))
+  
+  for (i in 1:nresp) {
+    utility <- data.model %*% draws[i,]
+    share = exp(utility)/sum(exp(utility))
+    shares[i,] <- share
+  }
+  
+  result <- cbind(colMeans(shares), data)
+  return(result)
+}
+predictions_mixed_strong <- predict.mixed.mnl.strong(model2.mixed_strong, data = new.data)
+
 
 ########################################
 #### Sensitivity Chart ####
 ########################################
+sensitivity.mnl <- function(model, attrib, base.data, competitor.data) {
+  data <- rbind(base.data, competitor.data)
+  base.share <- predict.mixed.mnl(model, data)[1,1]
+  share <- NULL
+  for (a in seq_along(attrib)) {
+    for (i in attrib[[a]]) {
+      data[1,] <- base.data
+      data[1,a] <- i
+      share <- c(share, predict.mixed.mnl(model, data)[1,1])
+    }
+  }
+  data.frame(level=unlist(attrib), share=share, increase=share-base.share)
+}
+# base.data should contain the baseline level of our model
+# doing summary(model2.mixed_strong) shows that baseline is: Price_num low, Huawei, Low Ram, Foldable Yes, Camera quality low
+base.data <- new.data[1,]
+competitor.data <- new.data[-1,]
+tradeoff <- sensitivity.mnl(model2.mixed_corr, attributes, base.data, competitor.data)
+tradeoff$labels <- paste0(rep(names(attributes), sapply(attributes, length)),
+                          "\n", tradeoff$level)
 
 
+sensitivity.mnl.strong <- function(model, attrib, base.data, competitor.data) {
+  data <- rbind(base.data, competitor.data)
+  base.share <- predict.mixed.mnl.strong(model, data)[1,1]
+  share <- NULL
+  for (a in seq_along(attrib)) {
+    for (i in attrib[[a]]) {
+      data[1,] <- base.data
+      data[1,a] <- i
+      share <- c(share, predict.mixed.mnl.strong(model, data)[1,1])
+    }
+  }
+  data.frame(level=unlist(attrib), share=share, increase=share-base.share)
+}
+tradeoff_strong <- sensitivity.mnl.strong(model2.mixed_strong, attributes, base.data, competitor.data)
+tradeoff_strong$labels <- paste0(rep(names(attributes), sapply(attributes, length)),
+                          "\n", tradeoff$level)
+
+barplot(tradeoff_strong$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, 
+        ylab="Change in Share for the Planned Product Design", 
+        ylim=c(-0.1, 0.4), cex.names=0.7)
+grid(nx=NA, ny=NULL)
+barplot(tradeoff$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, 
+        ylab="Change in Share for the Planned Product Design", 
+        ylim=c(-0.1, 0.4), cex.names=0.7)
+grid(nx=NA, ny=NULL)
