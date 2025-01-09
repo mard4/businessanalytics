@@ -49,16 +49,6 @@ length(unique(data$resp.id))
 # 4500 questions
 length(unique(data$ques))
 
-
-# Numeric
-# data %>%
-#   select_if(is.numeric) %>%
-#   gather() %>%
-#   ggplot2::ggplot(aes(value)) +
-#   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
-#   facet_wrap(~key, scales = "free") +
-#   theme_minimal()
-
 ###
 table(data$alt[data$choice == 1]) # inclinazione verso il centro
 table(data$alt[data$choice == 0]) 
@@ -82,23 +72,27 @@ df$RAMGB <- factor(df$RAMGB, levels=c("Low","LowerMid-range","Mid-range","High-e
 
 #### Frequencies
 
+library(tidyverse)
+
 df %>%
   select_if(is.factor) %>%
   gather() %>%
   ggplot(aes(value)) +
-  geom_bar(fill = "lightblue", color = "black") +
+  geom_bar(fill = "lightgreen", color = "black") +
+  geom_text(stat = "count", aes(label = ..count..), hjust = 1.5, color = "white", size = 4) +
   facet_wrap(~key, scales = "free") +
-  geom_text(stat = "count", aes(label = ..count..), vjust = 1.5, color = "white", size = 4) +
   xlab("") +
   ylab("Count") +
+  coord_flip() +
   theme_minimal()
 
+# choice x alternatives
+grouped_data <- df %>%
+  group_by(alt) %>%
+  summarize(choice = sum(choice)) %>%
+  ungroup()
+print(grouped_data)
 
-ggplot(data, aes(x = factor(alt), y = choice)) +
-  geom_bar(stat = "identity", fill = "lightblue") +
-  labs(x = "Alternative (alt)", y = "Choice Counts", title = "Distribution of Choices by Alternative") +
-  geom_text(aes(label = choice), vjust = 1.5, color = "white", size = 4) +
-  theme_minimal()
 
 
 #### ============================================== 
@@ -246,7 +240,7 @@ random_coefs_df <- as.data.frame(random_coefs)
 #### Analyze Random Effects for Price ####
 ########################################
 
-names(rpar(model2.mixed))
+#names(rpar(model2.mixed))
 # Random effect for PriceLowerMid-range
 # PriceLowerMid.distr <- rpar(model2.mixed, "PriceLowerMid-range")
 # summary(PriceLowerMid.distr)
