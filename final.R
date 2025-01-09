@@ -1,13 +1,12 @@
 getwd()
-setwd("C:/Users/Mardeen/Desktop/businessanalytics")
-setwd("/home/lorenzo/Desktop/labcust/businessanalytics")
+setwd("/home/sav/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
 library(ggplot2)
 library(tidyr)
 library(MASS)
-
+set.seed(45)
 
 data <- read.csv2("CBC_cellphone_data.csv")
 price_mapping <- c("Budget" = 200, 
@@ -301,6 +300,7 @@ random_price_num_mean <- random_price_num$mean
 random_price_num_sigma <- random_price_num$sigma
 
 random_coefs_df <- as.data.frame(random_coefs)
+bic_model2.mixed <- calculate_mlogit_bic(model2.mixed)
 
 ########################################
 #### Add Correlated Random Coefficients ####
@@ -309,6 +309,7 @@ random_coefs_df <- as.data.frame(random_coefs)
 # Update the model to include correlations between random effects
 model2.mixed_corr <- update(model2.mixed, correlation = TRUE)
 summary(model2.mixed_corr)
+bic_model2.mixed_corr <- calculate_mlogit_bic(model2.mixed_corr)
 # Analyze the correlation matrix of random parameters
 summary(vcov(model2.mixed_corr, what = "rpar", type = "cor"))
 cor_matrix <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
@@ -376,6 +377,10 @@ print(strongly_correlated_features_06)
 # Update the model to include partially correlated random effects
 # Specify correlation only for the strongly correlated features
 model2.mixed_strong <- update(model2.mixed, correlation = strongly_correlated_features_07)
+bic_model2.mixed_strong <- calculate_mlogit_bic(model2.mixed_strong)
+# best model is bic_model2.mixed_strong !!!
+model2.mixed_strong_06 <- update(model2.mixed, correlation = strongly_correlated_features_06)
+bic_model2.mixed_strong_06 <- calculate_mlogit_bic(model2.mixed_strong_06)
 
 # Compare models using likelihood ratio tests
 # Fixed effects vs. uncorrelated random effects
@@ -384,9 +389,42 @@ lrtest(model2, model2.mixed)
 lrtest(model2.mixed, model2.mixed_corr)
 # Partially correlated random effects vs. all correlated random effects
 lrtest(model2.mixed_strong, model2.mixed) 
-
+lrtest(model2.mixed_strong_06, model2.mixed) 
+lrtest(model2.mixed_strong, model2.mixed_strong_06)
 # model2.mixed_strong is the better model (notice how the chi squared improves at each test)
 
+aic_bic_df <- data.frame(
+  model = character(0), 
+  AIC = numeric(0), 
+  BIC = numeric(0),
+  stringsAsFactors = FALSE
+)
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2.mixed",
+  AIC = AIC(model2.mixed),
+  BIC = calculate_mlogit_bic(model2.mixed)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2.mixed_corr",
+  AIC = AIC(model2.mixed_corr),
+  BIC = calculate_mlogit_bic(model2.mixed_corr)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2.mixed_strong_06",
+  AIC = AIC(model2.mixed_strong_06),
+  BIC = calculate_mlogit_bic(model2.mixed_strong_06)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2.mixed_strong_07",
+  AIC = AIC(model2.mixed_strong),
+  BIC = calculate_mlogit_bic(model2.mixed_strong)
+))
+
+aic_bic_df
 ########################################
 #### Simulating preference shares ####
 ########################################
@@ -460,7 +498,6 @@ tradeoff <- sensitivity.mnl(model2.mixed_corr, attributes, base.data, competitor
 tradeoff$labels <- paste0(rep(names(attributes), sapply(attributes, length)),
                           "\n", tradeoff$level)
 
-
 sensitivity.mnl.strong <- function(model, attrib, base.data, competitor.data) {
   data <- rbind(base.data, competitor.data)
   base.share <- predict.mixed.mnl.strong(model, data)[1,1]
@@ -478,11 +515,29 @@ tradeoff_strong <- sensitivity.mnl.strong(model2.mixed_strong, attributes, base.
 tradeoff_strong$labels <- paste0(rep(names(attributes), sapply(attributes, length)),
                           "\n", tradeoff$level)
 
-barplot(tradeoff_strong$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, 
+tradeoff_strong$labels <- c(
+  paste("Price", c("Budget", "Low-Mid", "Mid", "Upper-Mid", "Premium"), sep = "\n"),
+  paste("Brand", c("Huawei", "OnePlus", "Poco", "Xiaomi"), sep = "\n"),
+  paste("RAM", c("Low", "Low-Mid", "Mid", "High-end"), sep = "\n"),
+  paste("Foldable", c("Yes", "No"), sep = "\n"),
+  paste("Camera", c("Low", "Medium", "High"), sep = "\n")
+)
+
+barplot(tradeoff_strong$increase, horiz=FALSE, names.arg=tradeoff_strong$labels, las=2, 
         ylab="Change in Share for the Planned Product Design", 
         ylim=c(-0.1, 0.4), cex.names=0.7)
 grid(nx=NA, ny=NULL)
+
+tradeoff$labels <- c(
+  paste("Price", c("Budget", "Low-Mid", "Mid", "Upper-Mid", "Premium"), sep = "\n"),
+  paste("Brand", c("Huawei", "OnePlus", "Poco", "Xiaomi"), sep = "\n"),
+  paste("RAM", c("Low", "Low-Mid", "Mid", "High-end"), sep = "\n"),
+  paste("Foldable", c("Yes", "No"), sep = "\n"),
+  paste("Camera", c("Low", "Medium", "High"), sep = "\n")
+)
+
 barplot(tradeoff$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, 
         ylab="Change in Share for the Planned Product Design", 
         ylim=c(-0.1, 0.4), cex.names=0.7)
 grid(nx=NA, ny=NULL)
+
