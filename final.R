@@ -53,7 +53,7 @@ length(unique(data$ques))
 table(data$alt[data$choice == 1]) # inclinazione verso il centro
 table(data$alt[data$choice == 0]) 
 
-# verifica se la distribuzione delle scelte ? significativamente diversa da una distribuzione uniforme 
+# verifica se la distribuzione delle scelte è significativamente diversa da una distribuzione uniforme 
 chisq.test(table(data$alt[data$choice == 1]))
 
 df <- data
@@ -99,19 +99,22 @@ print(grouped_data)
 # Models
 #### ============================================== 
 # Create the design matrix
-data_mlogit <- dfidx(df, idx = list(c("ques", "resp.id"), "alt"))
-data_mlogit
+
+df_pricecat <- subset(df, select = -Price_num)
+df_pricenum <- subset(df, select = -Price) 
+data_mlogit_pricenum <- dfidx(df_pricenum, idx = list(c("ques", "resp.id"), "alt"))
+data_mlogit_pricecat  <- dfidx(df_pricecat, idx = list(c("ques", "resp.id"), "alt"))
 
 ## Le frequenze sono abbastanza bilanciate tra le 4 alternative
 ## Ho tenuto entrambi i modelli per vedere se ci sono variazioni trattando il prezzo come numerico vs factor
 
 model1_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
                              Foldable + CameraQuality,
-                           data = data_mlogit)
+                           data = data_mlogit_pricecat)
 
 model1 <- mlogit(choice ~ Price_num + Brand + RAMGB +
                    Foldable + CameraQuality,
-                 data = data_mlogit)
+                 data = data_mlogit_pricenum)
 
 
 summary(model1_price_fac)
@@ -141,9 +144,9 @@ bic_model1 <- calculate_mlogit_bic(model1)
 
 # Fit the model without intercept parameters
 model2 <- mlogit(choice ~ Price_num + Brand + RAMGB +
-                   Foldable + CameraQuality | -1, data = data_mlogit)
+                   Foldable + CameraQuality | -1, data = data_mlogit_pricenum)
 model2_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
-                   Foldable + CameraQuality | -1, data = data_mlogit)
+                   Foldable + CameraQuality | -1, data = data_mlogit_pricecat)
 summary(model2)
 summary(model2_price_fac)
 
@@ -194,7 +197,6 @@ aic_bic_df <- rbind(aic_bic_df, data.frame(
   BIC = calculate_mlogit_bic(model2)
 ))
 
-# Print the resulting dataframe
 print(aic_bic_df)
 #### ============================================== 
 # WTP
@@ -244,7 +246,6 @@ predict.mnl <- function(model, data) {
   cbind(share, data)
 }
 
-# Define attributes based on your data
 attributes <- list(
   Price = levels(df$Price),
   Brand = levels(df$Brand),
@@ -284,7 +285,7 @@ names(model2.rpar) <- coef_names
 # Fit the Mixed MNL model with uncorrelated random effects
 model2.mixed <- mlogit(
   choice ~ Price_num + Brand + RAMGB + Foldable + CameraQuality | -1,
-  data = data_mlogit,
+  data = data_mlogit_pricenum,
   panel = TRUE,
   rpar = model2.rpar,
   correlation = FALSE
@@ -300,24 +301,6 @@ random_price_num_mean <- random_price_num$mean
 random_price_num_sigma <- random_price_num$sigma
 
 random_coefs_df <- as.data.frame(random_coefs)
-
-########################################
-#### Analyze Random Effects for Price ####
-########################################
-
-#names(rpar(model2.mixed))
-# Random effect for PriceLowerMid-range
-# PriceLowerMid.distr <- rpar(model2.mixed, "PriceLowerMid-range")
-# summary(PriceLowerMid.distr)
-# mean(PriceLowerMid.distr)
-# plot(PriceLowerMid.distr)
-# 
-# # Random effect for PricePremium
-# PricePremium.distr <- rpar(model2.mixed, "PricePremium")
-# summary(PricePremium.distr)
-# mean(PricePremium.distr)
-# plot(PricePremium.distr)
-
 
 ########################################
 #### Add Correlated Random Coefficients ####
