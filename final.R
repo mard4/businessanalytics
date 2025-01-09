@@ -1,6 +1,6 @@
 getwd()
 setwd("C:/Users/Mardeen/Desktop/businessanalytics")
-setwd("/home/sav/Desktop/labcust/businessanalytics")
+setwd("/home/lorenzo/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
@@ -117,6 +117,27 @@ model1 <- mlogit(choice ~ Price_num + Brand + RAMGB +
 summary(model1_price_fac)
 summary(model1)
 
+calculate_mlogit_bic <- function(model) {
+  ll <- as.numeric(model$logLik)
+  
+  k <- length(model$coefficients)
+  
+  n <- length(model$fitted.values)
+  
+  bic <- -2 * ll + k * log(n)
+  
+  cat("Log-Likelihood:", ll, "\n")
+  cat("Number of Parameters (k):", k, "\n")
+  cat("Number of Observations (n):", n, "\n")
+  cat("BIC:", bic, "\n")
+  
+  return(bic)
+}
+
+AIC(model1)
+AIC(model1_price_fac)
+bic_model1_fact <- calculate_mlogit_bic(model1_price_fac)
+bic_model1 <- calculate_mlogit_bic(model1)
 
 # Fit the model without intercept parameters
 model2 <- mlogit(choice ~ Price_num + Brand + RAMGB +
@@ -126,17 +147,61 @@ model2_price_fac <- mlogit(choice ~ Price + Brand + RAMGB +
 summary(model2)
 summary(model2_price_fac)
 
+
+AIC(model2)
+AIC(model2_price_fac)
+bic_model2_fact <- calculate_mlogit_bic(model2_price_fac)
+bic_model2 <- calculate_mlogit_bic(model2)
 # Test the restriction on the intercepts by comparing the two models
 # through a likelihood ratio test
 lrtest(model2, model1)
 lrtest(model2_price_fac, model1_price_fac)
+  
+bic_model2_fact <- calculate_mlogit_bic(model2_price_fac)
+bic_model2 <- calculate_mlogit_bic(model2)
 
+AIC(model2)
+AIC(model2_price_fac)
+
+aic_bic_df <- data.frame(
+  model = character(0), 
+  AIC = numeric(0), 
+  BIC = numeric(0),
+  stringsAsFactors = FALSE
+)
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model1_price_fac",
+  AIC = AIC(model1_price_fac),
+  BIC = calculate_mlogit_bic(model1_price_fac)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model1",
+  AIC = AIC(model1),
+  BIC = calculate_mlogit_bic(model1)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2_price_fac",
+  AIC = AIC(model2_price_fac),
+  BIC = calculate_mlogit_bic(model2_price_fac)
+))
+
+aic_bic_df <- rbind(aic_bic_df, data.frame(
+  model = "model2",
+  AIC = AIC(model2),
+  BIC = calculate_mlogit_bic(model2)
+))
+
+# Print the resulting dataframe
+print(aic_bic_df)
 #### ============================================== 
 # WTP
 #### ============================================== 
 
 # Compute the willingness to pay
-coefs <- summary(model1)$coefficients
+coefs <- summary(model2)$coefficients
 price_coef <- coefs["Price_num"]
 wtp <- -coefs / price_coef
 wtp
