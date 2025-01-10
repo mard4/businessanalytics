@@ -1,5 +1,5 @@
 getwd()
-setwd("/home/sav/Desktop/labcust/businessanalytics")
+#setwd("/home/sav/Desktop/labcust/businessanalytics")
 
 library(dplyr)
 library(mlogit)
@@ -21,7 +21,6 @@ data$Price_num <- price_mapping[data$Price]
 head(data)
 str(data)
 # ok the data is in a wide format, each row represent a question, so we have more columns
-
 
 for (col in 1:ncol(data)) {
   cat("Unique values in column", colnames(data)[col], ":\n")
@@ -48,7 +47,6 @@ length(unique(data$resp.id))
 # 4500 questions
 length(unique(data$ques))
 
-###
 table(data$alt[data$choice == 1]) # inclinazione verso il centro
 table(data$alt[data$choice == 0]) 
 
@@ -69,8 +67,9 @@ df$CameraQuality <- factor(df$CameraQuality,
                         levels = c("Low","Medium","High"))
 df$RAMGB <- factor(df$RAMGB, levels=c("Low","LowerMid-range","Mid-range","High-end"))
 
-#### Frequencies
-
+#### ============================================== 
+# Data viz
+#### ============================================== 
 library(tidyverse)
 
 df %>%
@@ -97,6 +96,7 @@ print(grouped_data)
 #### ============================================== 
 # Models
 #### ============================================== 
+
 # Create the design matrix
 
 df_pricecat <- subset(df, select = -Price_num)
@@ -197,10 +197,10 @@ aic_bic_df <- rbind(aic_bic_df, data.frame(
 ))
 
 print(aic_bic_df)
+
 #### ============================================== 
 # WTP
 #### ============================================== 
-
 # Compute the willingness to pay
 coefs <- summary(model2)$coefficients
 price_coef <- coefs["Price_num"]
@@ -212,8 +212,6 @@ wtp_df <- data.frame(
   Attribute = names(wtp),
   WTP = wtp
 )
-
-
 # Remove Price_num from results since it's our reference
 wtp_df <- wtp_df[wtp_df$Attribute != "Price_num", ]
 
@@ -266,14 +264,9 @@ predictions <- predict.mnl(model2, new.data)
 predictions_df <- as.data.frame(predictions)
 print(predictions)
 
-
 #### ============================================== 
-# Modelling: Mixed MNL model
+# Models: Mixed MNL Model
 #### ============================================== 
-
-########################################
-#### 3- Modelling: Mixed MNL model ####
-########################################
 
 # Define the random parameter structure
 # Set all parameters to have random effects with normal distribution
@@ -302,77 +295,52 @@ random_price_num_sigma <- random_price_num$sigma
 random_coefs_df <- as.data.frame(random_coefs)
 bic_model2.mixed <- calculate_mlogit_bic(model2.mixed)
 
-########################################
-#### Add Correlated Random Coefficients ####
-########################################
-
-# Update the model to include correlations between random effects
+#### ============================================== 
+# Add Correlated Random Coefficients 
+#### ============================================== 
 model2.mixed_corr <- update(model2.mixed, correlation = TRUE)
 summary(model2.mixed_corr)
 bic_model2.mixed_corr <- calculate_mlogit_bic(model2.mixed_corr)
-# Analyze the correlation matrix of random parameters
-summary(vcov(model2.mixed_corr, what = "rpar", type = "cor"))
-cor_matrix <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
+
+cor_matrix <- cov2cor(cov.mlogit(model2.mixed_corr))
+
 cor_df <- as.data.frame(as.table(cor_matrix))
-# Plot the heatmap using ggplot2
-ggplot(cor_df, aes(Var1, Var2, fill = Freq)) +
+str(cor_df)
+#cor_df <- as.data.frame(as.table(cor_matrix))
+
+# Plot the lower triangle heatmap
+cor_df_lower <- cor_df %>%
+  filter(as.numeric(Var1) >= as.numeric(Var2))
+ggplot(cor_df_lower, aes(Var1, Var2, fill = Freq)) +
   geom_tile(color = "white") +
-  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1), space = "Lab", name = "Correlation") +
+  geom_text(aes(label = round(Freq, 2)), color = "black") +  # Add correlation values
+  scale_fill_gradient2(
+    low = "blue", high = "red", mid = "white",
+    midpoint = 0, limit = c(-1, 1), space = "Lab",
+    name = "Correlation"
+  ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Correlation Matrix of Random Parameters (Mixed MNL Model)",
-       x = "",
-       y = "")
-
-
-#############
-# Function to get features with strong correlations for easier visualization
-get_strong_correlations_df <- function(corr_mat, threshold) {
-  # Find indices of correlations above threshold or below -threshold
-  high_corr_indices <- which(abs(corr_mat) > threshold, arr.ind = TRUE)
-  
-  # Filter out self-correlations (where row index equals column index)
-  high_corr_indices <- high_corr_indices[high_corr_indices[, 1] != high_corr_indices[, 2], ]
-  
-  # Create a dataframe to store variable pairs and their correlation values
-  correlations_df <- data.frame(
-    Feature1 = rownames(corr_mat)[high_corr_indices[, 1]],
-    Feature2 = colnames(corr_mat)[high_corr_indices[, 2]],
-    Correlation = corr_mat[high_corr_indices]
+  labs(
+    title = "Correlation Matrix of Random Parameters (Mixed MNL Model)",
+    x = "", y = ""
   )
-  return(correlations_df)
-}
-# Extract the correlation matrix of random parameters
-corr_mat <- vcov(model2.mixed_corr, what = "rpar", type = "cor")
-# Get features with strong correlations
-strongly_correlated_features_07 <- get_strong_correlations_df(corr_mat, threshold = 0.7)
-strongly_correlated_features_06 <- get_strong_correlations_df(corr_mat, threshold = 0.6)
-
-print(strongly_correlated_features_07)
-print(strongly_correlated_features_06)
 
 
-# Function to get features with strong correlations to create the model
-
+#### ============================================== 
+# Model with strong correlated coeffs
+#### ============================================== 
 get_strong_correlations <- function(corr_mat, threshold = 0.7) {
-  # Find indices of correlations above threshold or below -threshold
   high_corr_indices <- which(abs(corr_mat) > threshold, arr.ind = TRUE)
-  
-  # Filter out self-correlations (where row index equals column index)
   high_corr_indices <- high_corr_indices[high_corr_indices[, 1] != high_corr_indices[, 2], ]
-  
-  # Get the unique feature names from the row and column indices
   features <- unique(c(rownames(corr_mat)[high_corr_indices[, 1]], 
                        colnames(corr_mat)[high_corr_indices[, 2]]))
-  
-  return(features)
-}
-# Get features with strong correlations
-strongly_correlated_features_07 <- get_strong_correlations(corr_mat, threshold = 0.7)
-strongly_correlated_features_06 <- get_strong_correlations(corr_mat, threshold = 0.6)
-
+  return(features)}
+strongly_correlated_features_07 <- get_strong_correlations(cor_matrix, threshold = 0.7)
+strongly_correlated_features_06 <- get_strong_correlations(cor_matrix, threshold = 0.6)
 print(strongly_correlated_features_07)
 print(strongly_correlated_features_06)
+
 
 # Update the model to include partially correlated random effects
 # Specify correlation only for the strongly correlated features
@@ -425,9 +393,11 @@ aic_bic_df <- rbind(aic_bic_df, data.frame(
 ))
 
 aic_bic_df
-########################################
-#### Simulating preference shares ####
-########################################
+
+
+#### ============================================== 
+# Simulating preference shares
+#### ============================================== 
 predict.mixed.mnl <- function(model, data, nresp=1000) {
   data.model <- model.matrix(update(model$formula, 0 ~ .), data = data)[,-1]
   coef.Sigma <- cov.mlogit(model)
@@ -474,9 +444,9 @@ predict.mixed.mnl.strong <- function(model, data, nresp=1000) {
 predictions_mixed_strong <- predict.mixed.mnl.strong(model2.mixed_strong, data = new.data)
 
 
-########################################
-#### Sensitivity Chart ####
-########################################
+#### ============================================== 
+# Sensitivity Chart
+#### ============================================== 
 sensitivity.mnl <- function(model, attrib, base.data, competitor.data) {
   data <- rbind(base.data, competitor.data)
   base.share <- predict.mixed.mnl(model, data)[1,1]
@@ -523,7 +493,17 @@ tradeoff_strong$labels <- c(
   paste("Camera", c("Low", "Medium", "High"), sep = "\n")
 )
 
-barplot(tradeoff_strong$increase, horiz=FALSE, names.arg=tradeoff_strong$labels, las=2, 
+#### ============================================== 
+# Plots
+#### ============================================== 
+par(mfrow=c(1,1))
+clean_labels <- gsub("\n", " ", tradeoff$labels) 
+first_words <- sapply(strsplit(clean_labels, " "), `[`, 1)  
+unique_words <- unique(first_words)
+colors <- rainbow(length(unique_words))  
+bar_colors <- colors[match(first_words, unique_words)]
+
+barplot(tradeoff_strong$increase, horiz=FALSE, names.arg=tradeoff_strong$labels, las=2, col=bar_colors,
         ylab="Change in Share for the Planned Product Design", 
         ylim=c(-0.1, 0.4), cex.names=0.7)
 grid(nx=NA, ny=NULL)
@@ -536,7 +516,7 @@ tradeoff$labels <- c(
   paste("Camera", c("Low", "Medium", "High"), sep = "\n")
 )
 
-barplot(tradeoff$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, 
+barplot(tradeoff$increase, horiz=FALSE, names.arg=tradeoff$labels, las=2, col=bar_colors,
         ylab="Change in Share for the Planned Product Design", 
         ylim=c(-0.1, 0.4), cex.names=0.7)
 grid(nx=NA, ny=NULL)
